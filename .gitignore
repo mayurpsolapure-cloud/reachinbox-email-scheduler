@@ -1,0 +1,31 @@
+**/node_modules/
+**/dist/
+coverage/
+.vite/
+
+# Local credentials and per-machine configuration. Keep sanitized templates.
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Build output, logs, and OS/editor noise.
+*.tsbuildinfo
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local QA recipient fixtures; do not commit contact lists.
+/duplicate-test.csv
+/invalid-test.csv
+/qa-leads.csv
+/test-leads.csv
+
+# Private keys/certificates.
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+.secrets/
