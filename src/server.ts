@@ -143,7 +143,8 @@ async function startServer() {
   try {
     await connectElasticsearch();
     await backfillSentEmails();
-  } catch {
+  } catch (error) {
+    console.error("Elasticsearch initialization error:", error);
     if (process.env.NODE_ENV === "production") {
       throw new Error("Elasticsearch initialization failed; refusing to start without search");
     }
