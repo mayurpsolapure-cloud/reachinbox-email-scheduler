@@ -45,6 +45,7 @@
     "test:api-rate-limit": "node --env-file=.env --import tsx --test scripts/api-rate-limit.test.ts",
     "test:scheduler:bulk": "node --env-file=.env --import tsx --test scripts/scheduler.bulk.integration.test.ts",
     "start": "node --env-file-if-exists=.env dist/server.js",
+    "start:migrate": "node --env-file-if-exists=.env dist/db/migrate.js && node --env-file-if-exists=.env dist/server.js",
     "worker:start": "node --env-file-if-exists=.env dist/workers/email.worker.js",
     "db:migrate": "node --env-file-if-exists=.env --import tsx src/db/migrate.ts",
     "db:migrate:compiled": "node --env-file-if-exists=.env dist/db/migrate.js",
