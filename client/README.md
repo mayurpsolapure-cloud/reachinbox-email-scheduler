@@ -38,7 +38,7 @@ npm run dev
 
 The browser is redirected through the backend OAuth authorization-code flow. Google ID tokens are verified server-side and never sent to or stored in browser storage. Authenticated API requests use the HttpOnly PostgreSQL-backed session cookie.
 
-The Google sign-in button starts OAuth directly on the backend origin so the session cookie hostname matches `GOOGLE_CALLBACK_URL`. Local development defaults to `http://localhost:5000`; if needed, set `VITE_AUTH_API_ORIGIN=http://localhost:5000` in `client/.env.local` and restart Vite. Use the same hostname consistently in the callback URL and frontend URL (for example, do not mix `localhost` and `127.0.0.1`).
+The Google sign-in button starts OAuth directly on the backend origin so the session cookie hostname matches `GOOGLE_CALLBACK_URL`. Local development defaults to `http://localhost:5000`; if the backend is elsewhere, set both `VITE_AUTH_API_ORIGIN` and `VITE_API_BASE_URL` in `client/.env.local`, then restart Vite. Use the same hostname consistently in the callback URL and frontend URL (for example, do not mix `localhost` and `127.0.0.1`).
 
 Run authentication checks with:
 
@@ -72,7 +72,7 @@ Compose creates a campaign, imports the validated unique recipient addresses usi
 - There is no global email-list API. The inboxes aggregate per-campaign email responses.
 - Per-campaign hourly limits, attachments, favorites, archive, and delete operations are unsupported. Attachment submission is blocked and unavailable actions are not simulated. The sender hourly limit is backend-managed.
 - The backend sends plain-text email bodies. Rich formatting and attachments are not delivered.
-- Sent status indicates acceptance by Ethereal test SMTP, not delivery to a recipient's actual inbox.
+- Sent status indicates acceptance by the Gmail API, not delivery to a recipient's actual inbox.
 - The backend currently sends campaign personalization tokens literally; it does not replace `{{first_name}}`, `{{last_name}}`, or `{{company}}`.
 
 Slack OAuth setup, rate-limit alert behavior, and live-demo steps are documented in the repository's [Slack integration guide](../SLACK_INTEGRATION.md).

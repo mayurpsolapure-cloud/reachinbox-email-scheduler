@@ -161,10 +161,14 @@ export async function backfillSentEmails(): Promise<number> {
        se.body,
        se.email_account_id,
        se.sent_at,
+       c.user_id,
+       ga.gmail_email,
        l.company,
        l.first_name,
        l.last_name
      FROM scheduled_emails se
+     JOIN campaigns c ON c.id = se.campaign_id
+     LEFT JOIN gmail_authorizations ga ON ga.user_id = c.user_id
      JOIN leads l ON l.id = se.lead_id
      WHERE se.status = 'sent'
        AND se.sent_at IS NOT NULL
@@ -179,8 +183,7 @@ export async function backfillSentEmails(): Promise<number> {
       recipientEmail: email.recipient_email,
       subject: email.subject,
       body: email.body,
-      senderId:
-        email.email_account_id ?? "default-ethereal-sender",
+      senderId: email.email_account_id ?? `gmail:${email.user_id}`,
       status: "sent",
       sentAt: new Date(email.sent_at).toISOString(),
       company: email.company,

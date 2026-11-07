@@ -12,19 +12,24 @@ import type { AuthenticatedUser } from "../src/types/express-session.js";
 process.env.GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com";
 process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
 process.env.GOOGLE_CALLBACK_URL = "http://localhost:5000/api/auth/google/callback";
+process.env.GOOGLE_GMAIL_CALLBACK_URL = "http://localhost:5000/api/integrations/gmail/callback";
 process.env.FRONTEND_URL = "http://localhost:5173";
 
 const profile: GoogleProfile = {
-  sub: "google-subject-123",
-  email: "person@example.com",
-  email_verified: true,
-  name: "Test Person",
-  picture: "https://example.com/avatar.png",
+  profile: {
+    sub: "google-subject-123",
+    email: "person@example.com",
+    email_verified: true,
+    name: "Test Person",
+    picture: "https://example.com/avatar.png",
+  },
+  refreshToken: null,
+  scopes: ["openid", "email", "profile", "https://www.googleapis.com/auth/gmail.send"],
 };
 const testUser: AuthenticatedUser = {
   id: "00000000-0000-4000-8000-000000000001",
   name: "Test Person",
-  email: profile.email,
+  email: profile.profile.email,
   avatarUrl: "https://example.com/avatar.png",
 };
 
@@ -48,6 +53,7 @@ before(async () => {
       findOrCreateCalls += 1;
       return testUser;
     },
+    saveGmailAuthorization: async () => {},
   }));
   app.get("/api/protected", requireAuth, (req, res) => {
     res.json({ userId: req.user?.id });
@@ -87,7 +93,17 @@ test("Google login redirects with requested OpenID scopes and CSRF state", async
   assert.match(location.searchParams.get("scope") ?? "", /openid/);
   assert.match(location.searchParams.get("scope") ?? "", /email/);
   assert.match(location.searchParams.get("scope") ?? "", /profile/);
+  assert.match(location.searchParams.get("scope") ?? "", /https:\/\/www\.googleapis\.com\/auth\/gmail\.send/);
+  assert.equal(location.searchParams.get("access_type"), "offline");
   assert.equal(location.searchParams.get("state")?.length, 43);
+});
+
+test("Gmail reconnect requests offline Gmail sending consent on its own callback", () => {
+  const location = new URL(createGoogleAuthorizationUrl("gmail-state", "gmail"));
+  assert.equal(location.searchParams.get("redirect_uri"), process.env.GOOGLE_GMAIL_CALLBACK_URL);
+  assert.equal(location.searchParams.get("access_type"), "offline");
+  assert.match(location.searchParams.get("prompt") ?? "", /consent/);
+  assert.match(location.searchParams.get("scope") ?? "", /https:\/\/www\.googleapis\.com\/auth\/gmail\.send/);
 });
 
 test("callback rejects invalid state", async () => {
@@ -113,7 +129,10 @@ test("callback rejects a failed Google token exchange", async () => {
 });
 
 test("callback rejects unverified Google email", async () => {
-  verifyCode = async () => ({ ...profile, email_verified: false });
+  verifyCode = async () => ({
+    ...profile,
+    profile: { ...profile.profile, email_verified: false },
+  });
   const { cookie, location } = await beginGoogleLogin();
   const response = await fetch(
     `${baseUrl}/api/auth/google/callback?code=unverified&state=${location.searchParams.get("state")}`,

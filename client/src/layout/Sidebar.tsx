@@ -1,4 +1,4 @@
-import { ChevronDown, FileClock, Mail, Plus, X } from "lucide-react";
+import { ChevronDown, FileClock, Mail, Plus, Settings as SettingsIcon, X } from "lucide-react";
 import { NavLink, Link } from "react-router-dom";
 import { useWorkspaceEmails } from "../hooks/useWorkspaceEmails";
 import { useAuth } from "../context/AuthContext";
@@ -51,6 +51,9 @@ export function Sidebar({
           </NavLink>
           <NavLink to="/sent" className={({ isActive }) => `nav-link inbox-nav-link ${isActive ? "nav-link-active" : ""}`} onClick={onCloseMobile}>
             <Mail size={16} /><span>Sent</span><span className="nav-count">{count(["sent", "failed"])}</span>
+          </NavLink>
+          <NavLink to="/settings" className={({ isActive }) => `nav-link inbox-nav-link ${isActive ? "nav-link-active" : ""}`} onClick={onCloseMobile}>
+            <SettingsIcon size={16} /><span>Settings</span>
           </NavLink>
         </nav>
         <div className="sidebar-spacer" />

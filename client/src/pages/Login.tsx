@@ -10,6 +10,7 @@ export default function Login() {
     if (error === "invalid_state") return "Your sign-in session could not be verified. Please make sure cookies are enabled and try again.";
     if (error === "google_denied") return "Google sign-in was cancelled.";
     if (error === "google_auth_failed") return "Google sign-in could not be completed. Please verify your account and try again.";
+    if (error === "gmail_authorization_failed") return "Sign-in succeeded, but Gmail sending permission could not be saved. Reconnect Gmail from Settings.";
     return "";
   });
 
@@ -35,7 +36,7 @@ export default function Login() {
         <label className="login-field">Password<input type="password" autoComplete="current-password" placeholder="Enter your password" /></label>
         <button className="login-submit" type="submit">Login</button>
         {message && <p className="login-error" role="alert">{message}</p>}
-        <p className="login-hint">Sign in securely with your Google account.</p>
+        <p className="login-hint">Sign in with Google and authorize Gmail sending to schedule email from that account.</p>
       </form>
     </main>
   );

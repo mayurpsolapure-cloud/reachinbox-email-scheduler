@@ -32,6 +32,22 @@ before(async () => {
     [userAId, `api-test-a-${userAId}@example.invalid`, userBId, `api-test-b-${userBId}@example.invalid`]
   );
   await pool.query(
+    `INSERT INTO gmail_authorizations
+       (user_id, gmail_email, google_sub, refresh_token_ciphertext,
+        refresh_token_nonce, refresh_token_tag, status, authorized_at)
+     VALUES
+       ($1, $2, $3, 'ciphertext', '000000000000000000000000', '00000000000000000000000000000000', 'connected', NOW()),
+       ($4, $5, $6, 'ciphertext', '000000000000000000000000', '00000000000000000000000000000000', 'connected', NOW())`,
+    [
+      userAId,
+      `api-test-a-${userAId}@example.invalid`,
+      `google-${userAId}`,
+      userBId,
+      `api-test-b-${userBId}@example.invalid`,
+      `google-${userBId}`,
+    ]
+  );
+  await pool.query(
     `INSERT INTO campaigns
        (id, user_id, name, subject, body, scheduled_at, timezone, minimum_delay_seconds)
      VALUES ($1, $2, 'Other user campaign', 'Other user', 'Private content', NOW(), 'UTC', 0)`,

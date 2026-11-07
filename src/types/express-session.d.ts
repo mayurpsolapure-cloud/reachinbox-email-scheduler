@@ -13,6 +13,9 @@ declare module "express-session" {
     oauthState?: string;
     slackOauthState?: string;
     slackOauthStateCreatedAt?: number;
+    gmailOauthState?: string;
+    gmailOauthStateCreatedAt?: number;
+    gmailOauthUserId?: string;
   }
 }
 

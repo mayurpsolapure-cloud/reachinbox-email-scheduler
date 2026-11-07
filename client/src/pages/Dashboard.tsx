@@ -76,7 +76,7 @@ export default function Dashboard() {
         <Metric icon={<Send size={17} />} label="Total campaigns" value={data.campaigns.length} foot="Created in this workspace" />
         <Metric icon={<Users size={17} />} label="Total leads" value={data.leadCount} foot="Unique contacts" />
         <Metric icon={<CalendarClock size={17} />} label="Scheduled emails" value={scheduled} foot="Pending, queued or processing" />
-        <Metric icon={<MailCheck size={17} />} label="Emails sent" value={count("sent")} foot="Accepted by test SMTP" positive />
+        <Metric icon={<MailCheck size={17} />} label="Emails sent" value={count("sent")} foot="Accepted by Gmail API" positive />
         <Metric icon={<CircleAlert size={17} />} label="Failed emails" value={count("failed")} foot="Requires attention" warning />
         <Metric icon={<Clock3 size={17} />} label="Pending emails" value={count("pending")} foot="Waiting to be queued" />
       </section>

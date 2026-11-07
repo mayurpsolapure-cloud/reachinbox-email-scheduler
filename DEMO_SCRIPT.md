@@ -1,10 +1,10 @@
 # ReachInbox demo script (maximum five minutes)
 
-This is a recording plan, not a claim that the demo has been performed. Use synthetic recipients and a test Google account. Ethereal captures messages for preview and does not deliver them to real inboxes.
+This is a recording plan, not a claim that the demo has been performed. Use a test Google account and synthetic recipients. Gmail API acceptance does not guarantee delivery to the recipient's inbox.
 
 ## Before recording
 
-1. Configure `.env` using `.env.example`: matching `POSTGRES_PASSWORD` and `DATABASE_URL`, Google OAuth values, `FRONTEND_URL`, and a strong `SESSION_SECRET`. Never show credentials, cookies, or real recipient data.
+1. Configure `.env` using `.env.example`: matching `POSTGRES_PASSWORD` and `DATABASE_URL`, both Google OAuth callback URLs, Google credentials, `GMAIL_TOKEN_ENCRYPTION_KEY`, `FRONTEND_URL`, and a strong `SESSION_SECRET`. Never show credentials, cookies, or real recipient data.
 2. From the project root:
 
    ```powershell
@@ -26,11 +26,11 @@ This is a recording plan, not a claim that the demo has been performed. Use synt
    npm --prefix client run dev
    ```
 
-4. Open `http://localhost:5173` and sign in with Google. Connect a test Slack workspace before recording only if showing a live alert.
+4. Open `http://localhost:5173`, sign in with Google, and authorize Gmail under **Settings**. Connect a test Slack workspace before recording only if showing a live alert.
 
 ## 0:00–0:30 — Introduction
 
-Show the dashboard. Explain that React/TypeScript talks to an Express API; campaigns and email state live in PostgreSQL; BullMQ jobs and sender-limit state use Redis; Ethereal is used for test sending; Elasticsearch powers sent-email search; Slack alerts are optional.
+Show the dashboard. Explain that React/TypeScript talks to an Express API; campaigns and email state live in PostgreSQL; Gmail tokens are encrypted at rest; BullMQ jobs and sender-limit state use Redis; email is sent through the user's authorized Gmail API; Elasticsearch powers sent-email search; Slack alerts are optional.
 
 ## 0:30–1:30 — Create scheduled emails
 
@@ -40,7 +40,7 @@ Open **Compose New Email**. Add synthetic recipient(s), subject and body. Option
 
 ## 1:30–2:15 — Dashboard
 
-Show Scheduled, Sent, and an email detail view. Explain that Sent means Ethereal accepted the test message, not that it arrived in a real inbox. The current UI does not show the Ethereal preview link.
+Show Scheduled, Sent, and an email detail view. Explain that Sent means Gmail accepted the API request, not that the message arrived in a real inbox.
 
 ## 2:15–3:30 — Restart persistence
 
@@ -73,10 +73,10 @@ WORKER_CONCURRENCY=2
 
 Stop and restart the worker with `npm run worker` so it loads the new settings. Queue at least three jobs using the **same sender identity** within the same fixed window and with a short scheduling stagger. Show delayed work in Bull Board at `http://localhost:5000/admin/queues` (HTTP Basic Auth is available only if configured).
 
-**Expected:** two reservations can proceed; later same-sender jobs are delayed. Different sender accounts have separate counters; campaigns with no account share the Ethereal fallback sender key. Show a Slack message only if a real notification is received in the channel.
+**Expected:** two reservations can proceed; later same-sender jobs are delayed. Different Google accounts have separate sender counters. Show a Slack message only if a real notification is received in the channel.
 
 Restore the normal environment values and restart the worker after recording. Do not delete shared queue data or use production campaigns.
 
 ## 4:30–5:00 — Conclusion
 
-Summarize PostgreSQL persistence, Redis/BullMQ delayed jobs, sender limits, bounded concurrency, and optional Slack alerts. Clearly state that Ethereal is a test transport and Gmail SMTP/real inbox delivery are not implemented. End on the dashboard or README.
+Summarize PostgreSQL persistence, Redis/BullMQ delayed jobs, sender limits, bounded concurrency, Gmail API acceptance semantics, and optional Slack alerts. Do not claim final inbox delivery is guaranteed. End on the dashboard or README.

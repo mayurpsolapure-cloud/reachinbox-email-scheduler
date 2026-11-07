@@ -1,25 +1,25 @@
 import { DelayedError, Worker } from "bullmq";
-import { Redis } from "ioredis";
 import type { PoolClient } from "pg";
 import { pool } from "../config/database.js";
+import { createRedisConnection } from "../config/redis.js";
 import {
   slackNotificationQueue,
   type SlackNotificationData,
 } from "../queue/email.queue.js";
 import {
-  getSenderEmail,
-  initializeEmailService,
-  sendTestEmail,
-} from "../services/email.service.js";
+  sendGmailEmail,
+  type GmailApiResponse,
+  GmailSendOutcomeUnknownError,
+} from "../services/gmail-api.service.js";
+import {
+  GmailAuthorizationError,
+  validateGmailTokenEncryptionKey,
+} from "../services/gmail-auth.service.js";
 import { acquireSenderCapacity } from "../services/rate-limiter.service.js";
 import { sendSlackRateLimitNotification } from "../services/slack.service.js";
 import { indexSentEmail } from "../services/email-search.service.js";
 
-const connection = new Redis({
-  host: process.env.REDIS_HOST || "127.0.0.1",
-  port: Number(process.env.REDIS_PORT) || 6379,
-  maxRetriesPerRequest: null,
-});
+const connection = createRedisConnection();
 
 type EmailJobData = {
   emailId: string;
@@ -33,8 +33,10 @@ type ClaimedEmail = {
   subject: string;
   body: string;
   attempt_count: number;
-  email_account_id: string | null;
   sender_email: string | null;
+  gmail_email: string | null;
+  gmail_send_attempted_at: Date | null;
+  gmail_message_id: string | null;
   user_id: string;
 };
 
@@ -67,7 +69,10 @@ async function updateCampaignStatus(client: PoolClient, campaignId: string) {
 }
 
 async function startWorker() {
-  await initializeEmailService();
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are required by the email worker");
+  }
+  validateGmailTokenEncryptionKey();
 
   const worker = new Worker<EmailJobData>(
     "email-sending",
@@ -79,27 +84,29 @@ async function startWorker() {
              attempt_count = attempt_count + 1,
              updated_at = NOW()
          FROM campaigns c
-         LEFT JOIN email_accounts ea ON ea.id = c.email_account_id
+         LEFT JOIN gmail_authorizations ga ON ga.user_id = c.user_id
+         LEFT JOIN users u ON u.id = c.user_id
          WHERE se.id = $1
            AND c.id = se.campaign_id
            AND se.status IN ('pending', 'queued')
          RETURNING
            se.id, se.campaign_id, se.lead_id, se.recipient_email,
            se.subject, se.body, se.attempt_count,
-           COALESCE(se.email_account_id, c.email_account_id) AS email_account_id,
-           ea.email AS sender_email, c.user_id`,
+           se.gmail_send_attempted_at, se.gmail_message_id,
+           COALESCE(ga.gmail_email, u.email) AS sender_email,
+           ga.gmail_email, c.user_id`,
         [emailId]
       );
       const email = claim.rows[0];
       if (!email) return { skipped: true };
 
-      const senderId = email.email_account_id ?? "default-ethereal-sender";
+      const senderId = `gmail:${email.user_id}`;
       let capacity;
       try {
         capacity = await acquireSenderCapacity(senderId, {
           userId: email.user_id,
-          emailAccountId: email.email_account_id,
-          senderEmail: email.sender_email ?? getSenderEmail(),
+          emailAccountId: null,
+          senderEmail: email.gmail_email ?? email.sender_email ?? "",
         });
       } catch {
         await pool.query(
@@ -149,29 +156,79 @@ async function startWorker() {
         console.error("Email metadata lookup failed; delivery will continue.");
       }
 
-      let result: Awaited<ReturnType<typeof sendTestEmail>>;
+      let result: GmailApiResponse;
       try {
-        result = await sendTestEmail(email.recipient_email, email.subject, email.body);
-      } catch {
+        result = await sendGmailEmail({
+          userId: email.user_id,
+          emailId: email.id,
+          recipient: email.recipient_email,
+          subject: email.subject,
+          body: email.body,
+          senderAddress: email.sender_email ?? "",
+          sendAttempted: email.gmail_send_attempted_at !== null,
+          existingMessageId: email.gmail_message_id,
+          markSendAttempted: async () => {
+            const persisted = await pool.query(
+              `UPDATE scheduled_emails
+               SET gmail_send_attempted_at = NOW(), updated_at = NOW()
+               WHERE id = $1 AND status = 'processing'
+                 AND gmail_send_attempted_at IS NULL
+               RETURNING id`,
+              [email.id]
+            );
+            return Boolean(persisted.rows[0]);
+          },
+          clearSendAttempt: async () => {
+            await pool.query(
+              `UPDATE scheduled_emails
+               SET gmail_send_attempted_at = NULL, updated_at = NOW()
+               WHERE id = $1 AND status = 'processing'`,
+              [email.id]
+            );
+          },
+        });
+      } catch (error) {
+        const authorizationError = error instanceof GmailAuthorizationError;
+        const uncertainSend = error instanceof GmailSendOutcomeUnknownError;
         try {
           await pool.query(
             `UPDATE scheduled_emails
              SET status = 'queued',
-                 last_error = 'SMTP send failed',
+                 last_error = $2,
                  updated_at = NOW()
              WHERE id = $1 AND status = 'processing'`,
-            [emailId]
+            [
+              emailId,
+              authorizationError
+                ? "Gmail authorization required; reconnect Gmail in Settings"
+                : uncertainSend
+                  ? "Gmail send outcome is unknown; verify the message before retrying"
+                : "Gmail API send failed",
+            ]
           );
           await pool.query(
             `INSERT INTO email_logs
              (scheduled_email_id, event_type, attempt_number, message)
-             VALUES ($1, 'retry', $2, 'SMTP send failed')`,
-            [emailId, email.attempt_count]
+             VALUES ($1, 'retry', $2, $3)`,
+            [
+              emailId,
+              email.attempt_count,
+              authorizationError
+                ? "Gmail authorization required; reconnect Gmail in Settings"
+                : uncertainSend
+                  ? "Gmail send outcome unknown; automatic retries will not send again"
+                  : "Gmail API send failed; BullMQ will retry",
+            ]
           );
         } catch (databaseError) {
           console.error("Could not update email retry status:", databaseError);
         }
-        throw new Error("SMTP send failed");
+        if (authorizationError) {
+          throw new Error(error.message);
+        }
+        if (uncertainSend) throw new Error(error.message);
+        console.error("Gmail API send attempt failed:", emailId);
+        throw new Error("Gmail API send failed");
       }
 
       let sentAt: Date | string = new Date();
@@ -181,10 +238,11 @@ async function startWorker() {
         await client.query("BEGIN");
         const updateResult = await client.query(
           `UPDATE scheduled_emails
-           SET status = 'sent', sent_at = NOW(), last_error = NULL, updated_at = NOW()
+           SET status = 'sent', sent_at = NOW(), last_error = NULL,
+               gmail_message_id = $2, gmail_api_response = $3, updated_at = NOW()
            WHERE id = $1 AND status = 'processing'
            RETURNING sent_at`,
-          [emailId]
+          [emailId, result.id, JSON.stringify(result)]
         );
         if (!updateResult.rows[0]) {
           throw new Error("Could not persist sent status");
@@ -193,13 +251,13 @@ async function startWorker() {
         await client.query(
           `INSERT INTO email_logs
            (scheduled_email_id, event_type, attempt_number, message, metadata)
-           VALUES ($1, 'sent', $2, 'Email sent successfully', $3)`,
+           VALUES ($1, 'sent', $2, 'Gmail API accepted the message', $3)`,
           [
             emailId,
             email.attempt_count,
             JSON.stringify({
-              messageId: result.messageId,
-              previewUrl: result.previewUrl,
+              gmailMessageId: result.id,
+              gmailApiResponse: result,
             }),
           ]
         );
@@ -214,7 +272,7 @@ async function startWorker() {
           }
         }
         console.error(
-          "SMTP accepted an email, but PostgreSQL could not confirm its sent status:",
+          "Gmail accepted an email, but PostgreSQL could not confirm its sent status:",
           emailId,
           databaseError
         );
@@ -240,7 +298,7 @@ async function startWorker() {
       } catch (indexError) {
         console.error("Email sent, but Elasticsearch indexing failed:", email.id, indexError);
       }
-      console.log("Email sent:", email.recipient_email);
+      console.log("Gmail API accepted email:", email.id);
       return result;
     },
     {
@@ -325,7 +383,10 @@ async function startWorker() {
   console.log("Slack notification worker is running");
 }
 
-startWorker().catch(() => {
-  console.error("Worker startup failed.");
+startWorker().catch((error: unknown) => {
+  console.error(
+    "Worker startup failed:",
+    error instanceof Error ? error.message : "Unknown startup error"
+  );
   process.exitCode = 1;
 });

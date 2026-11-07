@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import { pool } from "../config/database.js";
 import type { AuthenticatedUser } from "../types/express-session.js";
+import { validateGmailTokenEncryptionKey } from "./gmail-auth.service.js";
+
+export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 export type GoogleProfile = {
   sub: string;
@@ -11,7 +14,14 @@ export type GoogleProfile = {
   picture?: string;
 };
 
-let client: OAuth2Client | null = null;
+export type GoogleAuthorization = {
+  profile: GoogleProfile;
+  refreshToken: string | null;
+  scopes: string[];
+};
+
+type AuthorizationPurpose = "login" | "gmail";
+const clients = new Map<string, OAuth2Client>();
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -23,10 +33,16 @@ export function validateAuthEnvironment(): void {
   requiredEnv("GOOGLE_CLIENT_ID");
   requiredEnv("GOOGLE_CLIENT_SECRET");
   const callbackUrl = new URL(requiredEnv("GOOGLE_CALLBACK_URL"));
+  const gmailCallbackUrl = new URL(requiredEnv("GOOGLE_GMAIL_CALLBACK_URL"));
   const frontendUrl = new URL(requiredEnv("FRONTEND_URL"));
+  validateGmailTokenEncryptionKey();
   if (process.env.NODE_ENV === "production") {
-    if (callbackUrl.protocol !== "https:" || frontendUrl.protocol !== "https:") {
-      throw new Error("Google callback and frontend URLs must use HTTPS in production");
+    if (
+      callbackUrl.protocol !== "https:" ||
+      gmailCallbackUrl.protocol !== "https:" ||
+      frontendUrl.protocol !== "https:"
+    ) {
+      throw new Error("Google callbacks and frontend URL must use HTTPS in production");
     }
   }
   const secret = requiredEnv("SESSION_SECRET");
@@ -35,31 +51,41 @@ export function validateAuthEnvironment(): void {
   }
 }
 
-function googleClient(): OAuth2Client {
-  if (!client) {
-    client = new OAuth2Client(
+function googleClient(purpose: AuthorizationPurpose): OAuth2Client {
+  const callbackUrl = requiredEnv(
+    purpose === "gmail" ? "GOOGLE_GMAIL_CALLBACK_URL" : "GOOGLE_CALLBACK_URL"
+  );
+  let oauthClient = clients.get(callbackUrl);
+  if (!oauthClient) {
+    oauthClient = new OAuth2Client(
       requiredEnv("GOOGLE_CLIENT_ID"),
       requiredEnv("GOOGLE_CLIENT_SECRET"),
-      requiredEnv("GOOGLE_CALLBACK_URL")
+      callbackUrl
     );
+    clients.set(callbackUrl, oauthClient);
   }
-  return client;
+  return oauthClient;
 }
 
-export function createGoogleAuthorizationUrl(state: string): string {
-  return googleClient().generateAuthUrl({
-    access_type: "online",
+export function createGoogleAuthorizationUrl(
+  state: string,
+  purpose: AuthorizationPurpose = "login"
+): string {
+  return googleClient(purpose).generateAuthUrl({
+    access_type: "offline",
     response_type: "code",
-    scope: ["openid", "email", "profile"],
+    include_granted_scopes: true,
+    scope: ["openid", "email", "profile", GMAIL_SEND_SCOPE],
     state,
-    prompt: "select_account",
+    prompt: purpose === "gmail" ? "consent select_account" : "select_account",
   });
 }
 
 export async function verifyGoogleAuthorizationCode(
-  code: string
-): Promise<GoogleProfile> {
-  const oauthClient = googleClient();
+  code: string,
+  purpose: AuthorizationPurpose = "login"
+): Promise<GoogleAuthorization> {
+  const oauthClient = googleClient(purpose);
   const { tokens } = await oauthClient.getToken(code);
   if (!tokens.id_token) throw new Error("Google did not return an ID token");
 
@@ -79,11 +105,15 @@ export async function verifyGoogleAuthorizationCode(
   }
 
   return {
-    sub: payload.sub,
-    email,
-    email_verified: true,
-    ...(payload.name ? { name: payload.name } : {}),
-    ...(payload.picture ? { picture: payload.picture } : {}),
+    profile: {
+      sub: payload.sub,
+      email,
+      email_verified: true,
+      ...(payload.name ? { name: payload.name } : {}),
+      ...(payload.picture ? { picture: payload.picture } : {}),
+    },
+    refreshToken: tokens.refresh_token ?? null,
+    scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
   };
 }
 

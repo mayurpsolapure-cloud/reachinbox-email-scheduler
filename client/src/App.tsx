@@ -10,6 +10,7 @@ import QueueMonitor from "./pages/QueueMonitor";
 import ScheduledEmails from "./pages/ScheduledEmails";
 import SearchEmails from "./pages/SearchEmails";
 import SentEmails from "./pages/SentEmails";
+import Settings from "./pages/Settings";
 import { LoadingState } from "./components/ui";
 
 export default function App() {
@@ -52,6 +53,7 @@ function AuthenticatedRoutes() {
                 <Route path="/leads" element={<Leads />} />
                 <Route path="/search" element={<SearchEmails />} />
                 <Route path="/queue" element={<QueueMonitor />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/scheduled" replace />} />
               </Routes>
             </DashboardLayout>

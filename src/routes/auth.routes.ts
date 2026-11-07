@@ -6,13 +6,16 @@ import {
   createGoogleAuthorizationUrl,
   findOrCreateGoogleUser,
   verifyGoogleAuthorizationCode,
+  type GoogleAuthorization,
 } from "../services/auth.service.js";
+import { saveGmailAuthorization } from "../services/gmail-auth.service.js";
 
-export type GoogleProfile = Awaited<ReturnType<typeof verifyGoogleAuthorizationCode>>;
+export type GoogleProfile = GoogleAuthorization;
 export type AuthDependencies = {
   createAuthorizationUrl: (state: string) => string;
-  verifyCode: (code: string) => Promise<GoogleProfile>;
-  findOrCreateUser: (profile: GoogleProfile) => Promise<AuthenticatedUser>;
+  verifyCode: (code: string) => Promise<GoogleAuthorization>;
+  findOrCreateUser: (profile: GoogleAuthorization["profile"]) => Promise<AuthenticatedUser>;
+  saveGmailAuthorization: typeof saveGmailAuthorization;
 };
 
 function frontendUrl(): string {
@@ -32,6 +35,7 @@ export function createAuthRouter(
     createAuthorizationUrl: createGoogleAuthorizationUrl,
     verifyCode: verifyGoogleAuthorizationCode,
     findOrCreateUser: findOrCreateGoogleUser,
+    saveGmailAuthorization,
   }
 ) {
   const router = Router();
@@ -71,11 +75,21 @@ export function createAuthRouter(
     }
 
     try {
-      const profile = await dependencies.verifyCode(code);
-      if (profile.email_verified !== true) {
+      const authorization = await dependencies.verifyCode(code);
+      if (authorization.profile.email_verified !== true) {
         return redirectWithError(res, "google_auth_failed");
       }
-      const user = await dependencies.findOrCreateUser(profile);
+      const user = await dependencies.findOrCreateUser(authorization.profile);
+      if (
+        authorization.scopes.includes("https://www.googleapis.com/auth/gmail.send")
+      ) {
+        await dependencies.saveGmailAuthorization(
+          user.id,
+          authorization.profile,
+          authorization.refreshToken,
+          authorization.scopes
+        );
+      }
       req.session.regenerate((regenerateError) => {
         if (regenerateError) return next(regenerateError);
         req.session.user = user;

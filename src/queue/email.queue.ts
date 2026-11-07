@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { Redis } from "ioredis";
+import { createRedisConnection } from "../config/redis.js";
 
 export type SlackNotificationData = {
   userId: string;
@@ -9,11 +9,7 @@ export type SlackNotificationData = {
   delayedEmails: number;
 };
 
-export const redisConnection = new Redis({
-  host: process.env.REDIS_HOST || "127.0.0.1",
-  port: Number(process.env.REDIS_PORT) || 6379,
-  maxRetriesPerRequest: null,
-});
+export const redisConnection = createRedisConnection();
 
 export const emailQueue = new Queue("email-sending", {
   connection: redisConnection,

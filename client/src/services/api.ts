@@ -7,10 +7,18 @@ import type {
   Pagination,
 } from "../types";
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
+if (
+  import.meta.env.PROD &&
+  new URL(API_BASE_URL, window.location.origin).protocol !== "https:"
+) {
+  throw new Error("The production API URL must use HTTPS.");
+}
 export const AUTH_API_ORIGIN =
   import.meta.env.VITE_AUTH_API_ORIGIN ||
-  (import.meta.env.DEV ? "http://localhost:5000" : window.location.origin);
+  (import.meta.env.DEV
+    ? "http://localhost:5000"
+    : new URL(API_BASE_URL, window.location.origin).origin);
 
 export interface AuthenticatedUser {
   id: string;
@@ -27,6 +35,13 @@ export type SlackIntegrationStatus =
       channelName: string;
       connectedAt: string;
     };
+
+export type GmailIntegrationStatus = {
+    connected: boolean;
+    email: string | null;
+    status: "connected" | "reauthorization_required" | "not_connected";
+    reason?: "missing_refresh_token" | "revoked_or_expired";
+};
 
 export class ApiError extends Error {
   status: number;
@@ -49,7 +64,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new ApiError(
-      "Unable to reach the API. Check that the backend is running at http://localhost:5000.",
+      "Unable to reach the configured backend API. Check the API URL and backend service status.",
       0
     );
   }
@@ -103,6 +118,10 @@ export const api = {
 
   async getSlackIntegrationStatus(): Promise<SlackIntegrationStatus> {
     return request<SlackIntegrationStatus>("/integrations/slack/status");
+  },
+
+  async getGmailIntegrationStatus(): Promise<GmailIntegrationStatus> {
+    return request<GmailIntegrationStatus>("/integrations/gmail/status");
   },
 
   async disconnectSlack(): Promise<void> {

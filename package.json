@@ -9,9 +9,9 @@
     "express": "^5.3.0",
     "express-session": "^1.19.0",
     "google-auth-library": "^11.3.3",
+    "googleapis": "^189.0.0",
     "ioredis": "^6.0.0",
     "multer": "^2.5.0",
-    "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
@@ -26,11 +26,17 @@
     "typescript": "^7.0.2"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.9.0"
+  },
   "scripts": {
-    "dev": "node --env-file=.env --import tsx --watch src/server.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test:auth": "node --import tsx --test scripts/auth.routes.test.ts",
+    "test:cors": "node --import tsx --test scripts/api-cors.test.ts",
+    "test:gmail": "node --import tsx --test scripts/gmail.api.test.ts",
+    "test:gmail:db": "node --env-file=.env --import tsx --test scripts/gmail.db.integration.test.ts",
     "test:auth:db": "node --env-file=.env --import tsx --test scripts/auth.db.integration.test.ts",
     "test:auth:api": "node --env-file=.env --import tsx --test scripts/auth.api.integration.test.ts",
     "test:slack": "node --import tsx --test scripts/slack.routes.test.ts",
@@ -38,9 +44,10 @@
     "test:rate-limiter": "node --env-file=.env --import tsx --test scripts/rate-limiter.integration.test.ts",
     "test:api-rate-limit": "node --env-file=.env --import tsx --test scripts/api-rate-limit.test.ts",
     "test:scheduler:bulk": "node --env-file=.env --import tsx --test scripts/scheduler.bulk.integration.test.ts",
-    "start": "node --env-file=.env dist/server.js",
-    "worker:start": "node --env-file=.env dist/workers/email.worker.js",
-    "db:migrate": "node --env-file=.env --import tsx src/db/migrate.ts",
-    "worker": "node --env-file=.env --import tsx src/workers/email.worker.ts"
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "worker:start": "node --env-file-if-exists=.env dist/workers/email.worker.js",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx src/db/migrate.ts",
+    "db:migrate:compiled": "node --env-file-if-exists=.env dist/db/migrate.js",
+    "worker": "node --env-file-if-exists=.env --import tsx src/workers/email.worker.ts"
   }
 }

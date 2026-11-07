@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../config/database.js";
 import { emailQueue } from "../queue/email.queue.js";
+import { getGmailAuthorizationStatus } from "../services/gmail-auth.service.js";
 
 const router = Router();
 
@@ -21,6 +22,13 @@ router.post("/campaigns/:id/schedule", async (req, res) => {
   }
 
   const campaign = campaignResult.rows[0];
+  const gmailAuthorization = await getGmailAuthorizationStatus(userId);
+  if (!gmailAuthorization.connected) {
+    return res.status(409).json({
+      error: "Authorize or reconnect Gmail in Settings before scheduling emails.",
+      gmailAuthorizationRequired: true,
+    });
+  }
 
   const pendingCount = await pool.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count

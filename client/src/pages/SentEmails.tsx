@@ -13,7 +13,7 @@ export default function SentEmails() {
         <Link className="compose-link folder-compose" to="/compose"><Plus size={15} /> Compose New Email</Link>
       </div>
       <EmailList emails={rows} folder="sent" loading={loading} error={error} onRefresh={() => void reload()} />
-      <p className="backend-note">Sent status reflects acceptance by the configured Ethereal test transport, not delivery to a recipient's real inbox.</p>
+      <p className="backend-note">Sent status means Gmail accepted the message through its API; this does not guarantee final inbox delivery.</p>
     </div>
   );
 }
